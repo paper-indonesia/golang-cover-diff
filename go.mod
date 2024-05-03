@@ -1,4 +1,4 @@
-module github.com/flipgroup/golang-cover-diff
+module github.com/paper-indonesia/golang-cover-diff
 
 go 1.18
 
