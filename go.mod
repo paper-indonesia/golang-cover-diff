@@ -1,4 +1,4 @@
-module github.com/paper-indonesia/golang-cover-diff
+module github.com/paper-indonesia/golang-cover-diff/v2
 
 go 1.18
 
