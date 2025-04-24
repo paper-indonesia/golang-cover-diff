@@ -1,0 +1,10 @@
+name: generate and push vector embedding
+
+on:
+  push:
+    branches: [ 'main', 'master']
+
+jobs:
+  generate-and-push-vector-embedding:
+    uses: paper-indonesia/paper-devops/.github/workflows/push-to-vector-embedding.yaml@master
+    secrets: inherit
