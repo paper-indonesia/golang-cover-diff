@@ -1,0 +1,88 @@
+name: PR Analysis Trigger
+
+# This workflow triggers the reusable PR analysis workflow
+# whenever a pull request is opened, updated, or reopened
+on:
+  pull_request:
+    types:
+      - opened        # When a new PR is created
+      - synchronize   # When new commits are pushed to the PR
+      - reopened      # When a closed PR is reopened
+
+# Prevent concurrent runs for the same PR
+# Cancel in-progress runs when new commits are pushed
+concurrency:
+  group: pr-analysis-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # Job to trigger the reusable workflow
+  trigger-analysis:
+    name: Trigger PR Analysis
+
+    # Only run for PRs (not for merged commits)
+    if: github.event.pull_request != null
+
+    # Call the reusable workflow (v2 with Docker + Claude Code)
+    uses: paper-indonesia/omniscient/.github/workflows/pr-analysis-reusable-v2.yml@main
+
+    with:
+      # Pass PR context information to the reusable workflow
+      repository: ${{ github.repository }}
+      pr_number: ${{ github.event.pull_request.number }}
+      base_ref: ${{ github.event.pull_request.base.ref }}
+      head_ref: ${{ github.event.pull_request.head.ref }}
+      base_sha: ${{ github.event.pull_request.base.sha }}
+      head_sha: ${{ github.event.pull_request.head.sha }}
+      # Optional: specify custom Docker image tag
+      # docker_image_tag: 'latest'
+
+    # Pass required secrets to the reusable workflow
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      AWS_ECR_ROLE_ARN: ${{ secrets.AWS_ECR_ROLE_ARN }}
+
+  # Optional: Add a status check job
+  analysis-status:
+    name: PR Analysis Status Check
+    needs: trigger-analysis
+    runs-on: paper-backend
+    if: always()
+
+    steps:
+      - name: Check Analysis Result
+        run: |
+          ANALYSIS_STATUS="${{ needs.trigger-analysis.outputs.analysis_status }}"
+
+          if [ "$ANALYSIS_STATUS" = "success" ]; then
+            echo "✅ PR analysis completed successfully"
+            echo "Result file: ${{ needs.trigger-analysis.outputs.analysis_result }}"
+          else
+            echo "❌ PR analysis failed or was cancelled"
+            exit 1
+          fi
+
+      - name: Post Status Summary
+        if: always()
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+          ## 📊 PR Analysis Status
+
+          **PR Number:** #${{ github.event.pull_request.number }}
+          **Status:** ${{ needs.trigger-analysis.outputs.analysis_status == 'success' && '✅ Success' || '❌ Failed' }}
+          **Triggered by:** @${{ github.actor }}
+          **Event:** ${{ github.event_name }} (${{ github.event.action }})
+
+          **Links:**
+          - [View PR](${{ github.event.pull_request.html_url }})
+          - [View Analysis Workflow](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})
+          EOF
+
+# Required GitHub secrets for this workflow:
+# - ANTHROPIC_API_KEY: Your Claude API key
+# - AWS_ECR_ROLE_ARN: AWS IAM role ARN with ECR access (for OIDC auth)
+# Note: GITHUB_TOKEN is automatically provided by GitHub Actions (no secret needed)
+
+# Optional GitHub secrets:
+# - AWS_ACCESS_KEY_ID: AWS access key (if not using OIDC)
+# - AWS_SECRET_ACCESS_KEY: AWS secret key (if not using OIDC)
